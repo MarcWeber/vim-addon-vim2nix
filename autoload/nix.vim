@@ -41,7 +41,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
   if type == 'git'
     " should be using shell abstraction ..
     echo 'fetching '. a:repository.url
-    let s = s:System('$ $',a:opts.nix_prefetch_git, a:repository.url)
+    let s = s:System('$ $ 2>&1',a:opts.nix_prefetch_git, a:repository.url)
     let rev = matchstr(s, 'git revision is \zs[^\n\r]\+\ze')
     let sha256 = matchstr(s, 'hash is \zs[^\n\r]\+\ze')
     let dir = matchstr(s, 'path is \zs[^\n\r]\+\ze')
@@ -64,7 +64,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
   elseif type == 'hg'
     " should be using shell abstraction ..
     echo 'fetching '. a:repository.url
-    let s = s:System('$ $',a:opts.nix_prefetch_hg, a:repository.url)
+    let s = s:System('$ $ 2>&1',a:opts.nix_prefetch_hg, a:repository.url)
     let rev = matchstr(s, 'hg revision is \zs[^\n\r]\+\ze')
     let sha256 = matchstr(s, 'hash is \zs[^\n\r]\+\ze')
     let dir = matchstr(s, 'path is \zs[^\n\r]\+\ze')
