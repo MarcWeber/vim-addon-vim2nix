@@ -28,6 +28,7 @@ fun! nix#DependenciesFromCheckout(opts, name, repository, dir)
   return keys(get(info, 'dependencies', {}))
 endf
 
+
 " without deps
 fun! nix#NixDerivation(opts, name, repository) abort
   let n_a_name = nix#ToNixAttrName(a:name)
@@ -41,15 +42,17 @@ fun! nix#NixDerivation(opts, name, repository) abort
   if type == 'git'
     " should be using shell abstraction ..
     echo 'fetching '. a:repository.url
-    let s = s:System('$ $ 2>&1',a:opts.nix_prefetch_git, a:repository.url)
+    let s = s:System('$ $ --leave-dotGit 2>&1',a:opts.nix_prefetch_git, a:repository.url)
     let rev = matchstr(s, 'git revision is \zs[^\n\r]\+\ze')
     let sha256 = matchstr(s, 'hash is \zs[^\n\r]\+\ze')
     let dir = matchstr(s, 'path is \zs[^\n\r]\+\ze')
+    let date = split(s:System('git -C $ log -n 1 $', dir, '--pretty=format:%ci'), ' ')[0]
+    " date should be YYYY-mm-dd
 
     let dependencies = nix#DependenciesFromCheckout(a:opts, a:name, a:repository, dir)
     return {'n_a_name': n_a_name, 'n_n_name': n_n_name, 'dependencies': dependencies, 'derivation': join([
           \ '  "'.n_a_name.'" = buildVimPluginFrom2Nix {'.created_notice,
-          \ '    name = "'.n_n_name.'";',
+          \ '    name = "'.n_n_name.'-'.date.'";',
           \ '    src = fetchgit {',
           \ '      url = "'. a:repository.url .'";',
           \ '      rev = "'.rev.'";',
