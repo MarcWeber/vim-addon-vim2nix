@@ -1,0 +1,7 @@
+    setSourceRoot = ''
+      export sourceRoot=taglist
+      mkdir taglist
+      mv doc taglist
+      mv plugin taglist
+    '';
+    buildInputs = [ unzip ];

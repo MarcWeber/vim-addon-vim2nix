@@ -1,0 +1,1 @@
+    buildInputs = [ xkb_switch ];
