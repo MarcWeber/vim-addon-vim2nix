@@ -4,4 +4,3 @@
       mv doc taglist
       mv plugin taglist
     '';
-    buildInputs = [ unzip ];

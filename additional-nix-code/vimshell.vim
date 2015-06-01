@@ -1,1 +1,1 @@
-    dependencies = [ "vimproc.vim" ];
+    dependencies = [ "vimproc-vim" ];
