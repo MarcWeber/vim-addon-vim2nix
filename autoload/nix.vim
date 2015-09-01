@@ -4,11 +4,11 @@
 let s:plugin_root = expand('<sfile>:h:h')
 
 fun! nix#ToNixAttrName(s) abort
-  return a:s
+    return nix#ToNixName(a:s)
 endf
 
 fun! nix#ToNixName(s) abort
-  return substitute(a:s, '[:/]', '-', 'g')
+  return substitute(substitute(a:s, '[:/.]', '-', 'g'), 'github-', '', 'g')
 endf
 
 fun! s:System(...)
@@ -42,16 +42,15 @@ fun! nix#NixDerivation(opts, name, repository) abort
   if type == 'git'
     " should be using shell abstraction ..
     echo 'fetching '. a:repository.url
-    let s = s:System('$ $ --leave-dotGit 2>&1',a:opts.nix_prefetch_git, a:repository.url)
+    let s = s:System('$ --fetch-submodules $ 2>&1',a:opts.nix_prefetch_git, a:repository.url)
     let rev = matchstr(s, 'git revision is \zs[^\n\r]\+\ze')
     let sha256 = matchstr(s, 'hash is \zs[^\n\r]\+\ze')
     let dir = matchstr(s, 'path is \zs[^\n\r]\+\ze')
-    let date = split(s:System('git -C $ log -n 1 $', dir, '--pretty=format:%ci'), ' ')[0]
-    " date should be YYYY-mm-dd
+    let date = matchstr(s, 'Commit date is \zs[0-9-]\+\ze')
 
     let dependencies = nix#DependenciesFromCheckout(a:opts, a:name, a:repository, dir)
     return {'n_a_name': n_a_name, 'n_n_name': n_n_name, 'dependencies': dependencies, 'derivation': join([
-          \ '  "'.n_a_name.'" = buildVimPluginFrom2Nix {'.created_notice,
+          \ '  '.n_a_name.' = buildVimPluginFrom2Nix {'.created_notice,
           \ '    name = "'.n_n_name.'-'.date.'";',
           \ '    src = fetchgit {',
           \ '      url = "'. a:repository.url .'";',
@@ -61,6 +60,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
           \ '    dependencies = ['.join(map(copy(dependencies), "'\"'.nix#ToNixAttrName(v:val).'\"'")).'];',
           \ additional_nix_code,
           \ '  };',
+          \ '',
           \ '',
           \ ], "\n")}
 
@@ -74,7 +74,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
 
     let dependencies = nix#DependenciesFromCheckout(a:opts, a:name, a:repository, dir)
     return {'n_a_name': n_a_name, 'n_n_name': n_n_name, 'dependencies': dependencies, 'derivation':  join([
-          \ '  "'.n_a_name.'" = buildVimPluginFrom2Nix {'.created_notice,
+          \ '  '.n_a_name.' = buildVimPluginFrom2Nix {'.created_notice,
           \ '    name = "'.n_n_name.'";',
           \ '    src = fetchhg {',
           \ '      url = "'. a:repository.url .'";',
@@ -85,11 +85,11 @@ fun! nix#NixDerivation(opts, name, repository) abort
           \ additional_nix_code,
           \ '  };',
           \ '',
+          \ '',
           \ ], "\n")}
 
   elseif type == 'archive'
     let sha256 = split(s:System('nix-prefetch-url $ 2>/dev/null', a:repository.url), "\n")[0]
-
     " we should unpack the sources, look for the addon-info.json file ..
     " however most packages who have the addon-info.json file also are on
     " github thus will be of type "git" instead. The dependency information
@@ -99,7 +99,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
     let dependencies = keys(get(addon_info, 'dependencies', {}))
 
     return {'n_a_name': n_a_name, 'n_n_name': n_n_name, 'dependencies': dependencies, 'derivation':  join([
-          \ '  "'.n_a_name.'" = buildVimPluginFrom2Nix {'.created_notice,
+          \ '  '.n_a_name.' = buildVimPluginFrom2Nix {'.created_notice,
           \ '    name = "'.n_n_name.'";',
           \ '    src = fetchurl {',
           \ '      url = "'. a:repository.url .'";',
@@ -115,6 +115,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
           \ additional_nix_code,
           \ '  };',
           \ '',
+          \ '',
           \ ], "\n")}
   else
     throw a:name.' TODO: implement source '.string(a:repository)
@@ -125,25 +126,35 @@ endf
 fun! nix#AddNixDerivation(opts, cache, name, ...) abort
   if has_key(a:cache, a:name) | return | endif
   let repository = a:0 > 0 ? a:1 : {}
+  let name = a:name
 
   if repository == {}
     call vam#install#LoadPool()
     let list = matchlist(a:name, 'github:\([^/]*\)\%(\/\(.*\)\)\?$')
     if len(list) > 0
       if '' != list[2]
-        let repository = { 'type': 'git', 'url': 'git://github.com/'.list[1].'/'.list[2] }
+        let name = list[2]
+        let repository = { 'type': 'git', 'owner': list[1], 'repo': list[2], 'url': 'git://github.com/'.list[1].'/'.list[2] }
       else
-        let repository = { 'type': 'git', 'url': 'git://github.com/'.list[1].'/vim-addon-'.list[1] }
+        let name = list[1]
+        let repository = { 'type': 'git', 'owner': list[1], 'repo': 'vim-addon-'.list[1], 'url': 'git://github.com/'.list[1].'/vim-addon-'.list[1] }
       endif
     else
       let repository = get(g:vim_addon_manager.plugin_sources, a:name, {})
       if repository == {}
         throw "repository ".a:name." unkown!"
-      end
+      else
+          if repository.url =~ 'github'
+            let owner = matchstr(repository.url, 'github.com/\zs.\+\ze/')
+            let repo = matchstr(repository.url, '\/\zs[^\/]\+\ze$')
+            let url = repository.url
+            let repository = { 'type': 'git', 'owner': owner, 'repo': repo, 'url': url }
+          endif
+      endif
     endif
   endif
 
-  let a:cache[a:name] = nix#NixDerivation(a:opts, a:name, repository)
+  let a:cache[a:name] = nix#NixDerivation(a:opts, name, repository)
 
   " take known dependencies into account:
   let deps = get(a:cache[a:name], 'dependencies', [])
