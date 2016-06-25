@@ -42,17 +42,15 @@ fun! nix#NixDerivation(opts, name, repository) abort
   if type == 'git'
     " should be using shell abstraction ..
     echo 'fetching '. a:repository.url
-    let s = s:System('$ $ --leave-dotGit 2>&1',a:opts.nix_prefetch_git, a:repository.url)
+    let s = s:System('$ $ 2>&1',a:opts.nix_prefetch_git, a:repository.url)
     let rev = matchstr(s, 'git revision is \zs[^\n\r]\+\ze')
     let sha256 = matchstr(s, 'hash is \zs[^\n\r]\+\ze')
     let dir = matchstr(s, 'path is \zs[^\n\r]\+\ze')
-    let date = split(s:System('git -C $ log -n 1 $', dir, '--pretty=format:%ci'), ' ')[0]
-    " date should be YYYY-mm-dd
 
     let dependencies = nix#DependenciesFromCheckout(a:opts, a:name, a:repository, dir)
     return {'n_a_name': n_a_name, 'n_n_name': n_n_name, 'dependencies': dependencies, 'derivation': join([
           \ '  "'.n_a_name.'" = buildVimPluginFrom2Nix {'.created_notice,
-          \ '    name = "'.n_n_name.'-'.date.'";',
+          \ '    name = "'.n_n_name.'";',
           \ '    src = fetchgit {',
           \ '      url = "'. a:repository.url .'";',
           \ '      rev = "'.rev.'";',
@@ -63,6 +61,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
           \ '  };',
           \ '',
           \ ], "\n")}
+
 
   elseif type == 'hg'
     " should be using shell abstraction ..
