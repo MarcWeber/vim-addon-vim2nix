@@ -122,30 +122,32 @@ endf
 
 " also tries to handle dependencies
 fun! nix#AddNixDerivation(opts, cache, name, ...) abort
-  if has_key(a:cache, a:name) | return | endif
-  let repository = a:0 > 0 ? a:1 : {}
+  if !has_key(a:cache, a:name)
+    let repository = a:0 > 0 ? a:1 : {}
 
-  if repository == {}
-    call vam#install#LoadPool()
-    let list = matchlist(a:name, 'github:\([^/]*\)\%(\/\(.*\)\)\?$')
-    if len(list) > 0
-      if '' != list[2]
-        let repository = { 'type': 'git', 'url': 'git://github.com/'.list[1].'/'.list[2] }
+    if repository == {}
+      call vam#install#LoadPool()
+      let list = matchlist(a:name, 'github:\([^/]*\)\%(\/\(.*\)\)\?$')
+      if len(list) > 0
+        if '' != list[2]
+          let repository = { 'type': 'git', 'url': 'git://github.com/'.list[1].'/'.list[2] }
+        else
+          let repository = { 'type': 'git', 'url': 'git://github.com/'.list[1].'/vim-addon-'.list[1] }
+        endif
       else
-        let repository = { 'type': 'git', 'url': 'git://github.com/'.list[1].'/vim-addon-'.list[1] }
+        let repository = get(g:vim_addon_manager.plugin_sources, a:name, {})
+        if repository == {}
+          throw "repository ".a:name." unkown!"
+        end
       endif
-    else
-      let repository = get(g:vim_addon_manager.plugin_sources, a:name, {})
-      if repository == {}
-        throw "repository ".a:name." unkown!"
-      end
     endif
-  endif
 
-  let a:cache[a:name] = nix#NixDerivation(a:opts, a:name, repository)
+    let a:cache[a:name] = nix#NixDerivation(a:opts, a:name, repository)
+  endif
 
   " take known dependencies into account:
   let deps = get(a:cache[a:name], 'dependencies', [])
+  echom 'adding deps '.string(deps)
   call extend(a:opts.names_to_process, deps)
   call extend(a:opts.names_to_export,  deps)
 endfun
@@ -232,7 +234,9 @@ fun! nix#ExportPluginsForNix(opts) abort
   let cache = (cache_file == '' || !filereadable(cache_file)) ? {} : eval(readfile(cache_file)[0])
   let failed = {}
   while len(opts.names_to_process) > 0
+    " echom string(opts.names_to_process)
     let name = opts.names_to_process[0]
+    echom 'processing '.name
     if get(opts, 'try_catch', 1)
       try
         call nix#AddNixDerivation(opts, cache, name)
@@ -245,8 +249,11 @@ fun! nix#ExportPluginsForNix(opts) abort
     endif
     let opts.names_to_process = opts.names_to_process[1:]
   endwhile
-  echom join(keys(failed), ", ")
-  echom string(failed)
+  if len(failed) > 0
+    echom 'failed'
+    echom join(keys(failed), ", ")
+    echom string(failed)
+  endif
 
   if cache_file != ''
     call writefile([string(cache)], cache_file)
