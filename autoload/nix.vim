@@ -39,7 +39,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
   let ancf = s:plugin_root.'/additional-nix-code/'.a:name
   let additional_nix_code = file_readable(ancf) ? join(readfile(ancf), "\n") : ""
 
-  let repository = vam#install#CompleteRepoData(a:repository)
+  let repository = vam#install#CompleteRepoData(a:repository, {})
 
   if type == 'git'
     " should be using shell abstraction ..
