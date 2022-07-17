@@ -39,20 +39,22 @@ fun! nix#NixDerivation(opts, name, repository) abort
   let ancf = s:plugin_root.'/additional-nix-code/'.a:name
   let additional_nix_code = file_readable(ancf) ? join(readfile(ancf), "\n") : ""
 
+  let repository = vam#install#CompleteRepoData(a:repository)
+
   if type == 'git'
     " should be using shell abstraction ..
-    echo 'fetching '. a:repository.url
-    let s = s:System('$ $ 2>&1',a:opts.nix_prefetch_git, a:repository.url)
+    echo 'fetching '. repository.url
+    let s = s:System('$ $ 2>&1',a:opts.nix_prefetch_git, repository.url)
     let rev = matchstr(s, 'git revision is \zs[^\n\r]\+\ze')
     let sha256 = matchstr(s, 'hash is \zs[^\n\r]\+\ze')
     let dir = matchstr(s, 'path is \zs[^\n\r]\+\ze')
 
-    let dependencies = nix#DependenciesFromCheckout(a:opts, a:name, a:repository, dir)
+    let dependencies = nix#DependenciesFromCheckout(a:opts, a:name, repository, dir)
     return {'n_a_name': n_a_name, 'n_n_name': n_n_name, 'dependencies': dependencies, 'derivation': join([
           \ '  "'.n_a_name.'" = buildVimPluginFrom2Nix {'.created_notice,
           \ '    name = "'.n_n_name.'";',
           \ '    src = fetchgit {',
-          \ '      url = "'. a:repository.url .'";',
+          \ '      url = "'. repository.url .'";',
           \ '      rev = "'.rev.'";',
           \ '      sha256 = "'.sha256.'";',
           \ '    };',
@@ -65,18 +67,18 @@ fun! nix#NixDerivation(opts, name, repository) abort
 
   elseif type == 'hg'
     " should be using shell abstraction ..
-    echo 'fetching '. a:repository.url
-    let s = s:System('$ $ 2>&1',a:opts.nix_prefetch_hg, a:repository.url)
+    echo 'fetching '. repository.url
+    let s = s:System('$ $ 2>&1',a:opts.nix_prefetch_hg, repository.url)
     let rev = matchstr(s, 'hg revision is \zs[^\n\r]\+\ze')
     let sha256 = matchstr(s, 'hash is \zs[^\n\r]\+\ze')
     let dir = matchstr(s, 'path is \zs[^\n\r]\+\ze')
 
-    let dependencies = nix#DependenciesFromCheckout(a:opts, a:name, a:repository, dir)
+    let dependencies = nix#DependenciesFromCheckout(a:opts, a:name, repository, dir)
     return {'n_a_name': n_a_name, 'n_n_name': n_n_name, 'dependencies': dependencies, 'derivation':  join([
           \ '  "'.n_a_name.'" = buildVimPluginFrom2Nix {'.created_notice,
           \ '    name = "'.n_n_name.'";',
           \ '    src = fetchhg {',
-          \ '      url = "'. a:repository.url .'";',
+          \ '      url = "'. repository.url .'";',
           \ '      rev = "'.rev.'";',
           \ '      sha256 = "'.sha256.'";',
           \ '    };',
@@ -87,28 +89,28 @@ fun! nix#NixDerivation(opts, name, repository) abort
           \ ], "\n")}
 
   elseif type == 'archive'
-    let sha256 = split(s:System('nix-prefetch-url $ 2>/dev/null', a:repository.url), "\n")[0]
+    let sha256 = split(s:System('nix-prefetch-url $ 2>/dev/null', repository.url), "\n")[0]
 
     " we should unpack the sources, look for the addon-info.json file ..
     " however most packages who have the addon-info.json file also are on
     " github thus will be of type "git" instead. The dependency information
     " from vim-pi is encoded in the reposiotry. Thus this is likely to do the
     " right thing most of the time.
-    let addon_info = get(a:repository, 'addon-info', {})
+    let addon_info = get(repository, 'addon-info', {})
     let dependencies = keys(get(addon_info, 'dependencies', {}))
 
     return {'n_a_name': n_a_name, 'n_n_name': n_n_name, 'dependencies': dependencies, 'derivation':  join([
           \ '  "'.n_a_name.'" = buildVimPluginFrom2Nix {'.created_notice,
           \ '    name = "'.n_n_name.'";',
           \ '    src = fetchurl {',
-          \ '      url = "'. a:repository.url .'";',
-          \ '      name = "'. a:repository.archive_name .'";',
+          \ '      url = "'. repository.url .'";',
+          \ '      name = "'. repository.archive_name .'";',
           \ '      sha256 = "'.sha256.'";',
           \ '    };',
           \ '    buildInputs = [ unzip ];',
           \ '    dependencies = ['.join(map(copy(dependencies), "'\"'.nix#ToNixAttrName(v:val).'\"'")).'];',
           \ '    meta = {',
-          \ '       url = "http://www.vim.org/scripts/script.php?script_id='.a:repository.vim_script_nr.'";',
+          \ '       url = "http://www.vim.org/scripts/script.php?script_id='.repository.vim_script_nr.'";',
           \ '    };',
           \ addon_info == {} ? '' : ('    addon_info = '.nix#ToNix(string(addon_info), [], "").';'),
           \ additional_nix_code,
@@ -116,7 +118,7 @@ fun! nix#NixDerivation(opts, name, repository) abort
           \ '',
           \ ], "\n")}
   else
-    throw a:name.' TODO: implement source '.string(a:repository)
+    throw a:name.' TODO: implement source '.string(repository)
   endif
 endf
 
@@ -249,6 +251,7 @@ fun! nix#ExportPluginsForNix(opts) abort
     endif
     let opts.names_to_process = opts.names_to_process[1:]
   endwhile
+
   if len(failed) > 0
     echom 'failed'
     echom join(keys(failed), ", ")
@@ -273,6 +276,11 @@ fun! nix#ExportPluginsForNix(opts) abort
   " for VAM users output vam.pluginDictionaries which can be fed to
   " vim_customizable.customize.vimrc.vam.pluginDictionaries
   call append('$', ["", "", "", '# vam.pluginDictionaries'])
+
+  if len(failed) > 0
+  call append('$', ["FAILURES", string(failed)])
+  end
+
 
   let ns = []
   for x in a:opts.plugin_dictionaries
