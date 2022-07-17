@@ -40,6 +40,10 @@ fun! nix#NixDerivation(opts, name, repository) abort
   let additional_nix_code = file_readable(ancf) ? join(readfile(ancf), "\n") : ""
 
   let repository = vam#install#CompleteRepoData(a:repository, {})
+  if has_key(repository, 'url') && repository.url =~# 'git://github.com'
+    let repository.url = substitute(repository.url, '^git:\/\/', 'https://', '')
+  end
+ 
 
   if type == 'git'
     " should be using shell abstraction ..
